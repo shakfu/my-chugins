@@ -37,7 +37,7 @@
 #endif
 
 // CLAP headers
-#include "clap-headers/include/clap/clap.h"
+#include <clap/clap.h>
 
 // Helper function to resolve macOS bundle paths
 static std::string resolveClapPath(const char* path)

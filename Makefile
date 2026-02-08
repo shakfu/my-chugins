@@ -1,63 +1,67 @@
+# CMake frontend Makefile
+#
+# Usage:
+#   make                  Build all chugins
+#   make AbletonLink      Build only AbletonLink
+#   make CLAP VST3        Build CLAP and VST3
+#   make clean            Remove build directory
+#   make install          Install chugins
+#   make configure        Run CMake configure only
+#   make legacy-mac       Build via legacy Makefile (make mac)
+#
+# Options:
+#   BUILD_DIR=<path>      Build directory (default: build)
+#   BUILD_TYPE=<type>     CMake build type (default: Release)
+#   CMAKE_FLAGS=<flags>   Extra flags passed to cmake configure
+#   DESTDIR=<path>        Install prefix (default: /usr/local)
+#   JOBS=<n>              Parallel jobs (default: system cpu count)
 
-CHUGINS=AbletonLink AudioUnit CLAP VST3
+BUILD_DIR   ?= build
+BUILD_TYPE  ?= Release
+CMAKE_FLAGS ?=
+DESTDIR     ?= /usr/local
+JOBS        ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
-CHUGS_NOT_ON_WIN32=AudioUnit
-CHUGINS_WIN32=$(filter-out $(CHUGS_NOT_ON_WIN32),$(CHUGINS))
+CHUGINS := AbletonLink CLAP PdPatch VST3
 
-CHUGS=$(foreach CHUG,$(CHUGINS),$(CHUG)/$(CHUG).chug)
-WEBCHUGS=$(foreach CHUG,$(CHUGINS),$(CHUG)/$(CHUG).chug.wasm)
-CHUGS_WIN32=$(foreach CHUG,$(CHUGINS_WIN32),$(CHUG)/$(CHUG).chug)
-CHUGS_RELEASE=$(foreach CHUG,$(CHUGINS_WIN32),$(CHUG)/Release/$(CHUG).chug)
-CHUGS_CLEAN=$(addsuffix .clean,$(CHUGINS))
+.PHONY: all $(CHUGINS) configure clean install help legacy-%
 
-DESTDIR?=/usr/local
-INSTALL_DIR=$(DESTDIR)/lib/chuck
-INSTALL_DIR_WIN32="C:/Program Files/ChucK/chugins"
+all: $(CHUGINS)
 
-# default target: print usage message and quit
-current: 
-	@echo "[chugins build]: please use one of the following configurations:"
-	@echo "   make linux, make mac, make web, or make win32"
+$(BUILD_DIR)/CMakeCache.txt:
+	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+		-DCMAKE_INSTALL_PREFIX=$(DESTDIR) $(CMAKE_FLAGS)
 
-ifneq ($(CK_TARGET),)
-.DEFAULT_GOAL:=$(CK_TARGET)
-ifeq ($(MAKECMDGOALS),)
-MAKECMDGOALS:=$(.DEFAULT_GOAL)
-endif
-endif
+configure: $(BUILD_DIR)/CMakeCache.txt
 
-CHUCK_STRICT=1
+$(CHUGINS): $(BUILD_DIR)/CMakeCache.txt
+	cmake --build $(BUILD_DIR) --target $@ -j$(JOBS)
 
-mac: $(CHUGS)
-osx: $(CHUGS)
-linux: $(CHUGS)
-linux-alsa: $(CHUGS)
-linux-jack: $(CHUGS)
-web: $(WEBCHUGS)
-win32: $(CHUGS_WIN32)
+clean:
+	$(RM) -r $(BUILD_DIR)
 
-$(CHUGS):
-	CHUCK_STRICT=1 make -C $(dir $@) $(MAKECMDGOALS)
+install: all
+	cmake --install $(BUILD_DIR)
 
-$(WEBCHUGS):
-	CHUCK_STRICT=1 make -C $(dir $@) $(MAKECMDGOALS)
+legacy-%:
+	$(MAKE) -f Makefile.legacy $*
 
-clean: $(CHUGS_CLEAN)
-.PHONY: $(CHUGS_CLEAN)
-$(CHUGS_CLEAN):
-	make -C $(basename $@) clean
-
-#.PHONY: $(CHUGS_WIN32)
-#$(CHUGS_WIN32):
-#	cd $(basename $@); msbuild.exe /p:Configuration=Release
-
-install: $(CHUGS)
-	mkdir -p $(INSTALL_DIR)
-	cp -rf $(CHUGS) $(INSTALL_DIR)
-
-install-win32: $(CHUGS_RELEASE)
-	mkdir -p $(INSTALL_DIR_WIN32)
-	cp -rf $(CHUGS_RELEASE) $(INSTALL_DIR_WIN32)
-
-DATE=$(shell date +"%Y-%m-%d")
-
+help:
+	@echo "Targets:"
+	@echo "  all (default)     Build all chugins"
+	@echo "  AbletonLink       Build AbletonLink chugin"
+	@echo "  CLAP              Build CLAP chugin"
+	@echo "  PdPatch           Build PdPatch chugin"
+	@echo "  VST3              Build VST3 chugin"
+	@echo "  configure         Run CMake configure step only"
+	@echo "  clean             Remove build directory"
+	@echo "  install           Build and install all chugins"
+	@echo "  legacy-<target>   Delegate to Makefile.legacy (e.g. legacy-mac)"
+	@echo "  help              Show this message"
+	@echo ""
+	@echo "Options:"
+	@echo "  BUILD_DIR=<path>   (default: build)"
+	@echo "  BUILD_TYPE=<type>  (default: Release)"
+	@echo "  DESTDIR=<path>     (default: /usr/local)"
+	@echo "  JOBS=<n>           (default: cpu count)"
+	@echo "  CMAKE_FLAGS=<f>    Extra cmake flags"
