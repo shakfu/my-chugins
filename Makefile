@@ -24,7 +24,7 @@ JOBS        ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || ech
 
 CHUGINS := AbletonLink CLAP PdPatch VST3
 
-.PHONY: all $(CHUGINS) configure clean install help legacy-%
+.PHONY: all $(CHUGINS) configure clean install help legacy-% test-pdpatch-audio
 
 all: $(CHUGINS)
 
@@ -43,6 +43,9 @@ clean:
 install: all
 	cmake --install $(BUILD_DIR)
 
+test-pdpatch-audio: PdPatch
+	chuck --chugin:$(BUILD_DIR)/PdPatch/PdPatch.chug PdPatch/examples/test-osc.ck
+
 legacy-%:
 	$(MAKE) -f Makefile.legacy $*
 
@@ -56,6 +59,7 @@ help:
 	@echo "  configure         Run CMake configure step only"
 	@echo "  clean             Remove build directory"
 	@echo "  install           Build and install all chugins"
+	@echo "  test-pdpatch-audio  Play sine tones via PdPatch (requires chuck)"
 	@echo "  legacy-<target>   Delegate to Makefile.legacy (e.g. legacy-mac)"
 	@echo "  help              Show this message"
 	@echo ""
