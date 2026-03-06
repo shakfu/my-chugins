@@ -29,6 +29,7 @@ AbletonLink is a **UGen** (unit generator) that outputs step values based on syn
 - Tempo synchronization across applications
 - Quantum-based measure alignment
 - Configurable beat resolution
+- Configurable update interval for CPU/precision tradeoff
 - Latency compensation
 
 ---
@@ -170,6 +171,41 @@ AbletonLink link => blackhole;
 4 => link.resolution;
 ```
 
+### `updateInterval(int samples) -> int`
+
+Set how often (in samples) the Link timeline is polled during the audio tick. Lower values give finer timing resolution but use more CPU.
+
+**Parameters:**
+- `samples` - Number of samples between timeline updates (minimum 1)
+
+**Returns:** The value set
+
+**Default:** 64
+
+**Notes:**
+- At 44.1kHz, 64 samples is ~1.45ms -- well below audible timing jitter
+- Setting to 1 restores per-sample polling (original behavior, highest CPU)
+- Between updates, the previous step value is held
+- Higher values reduce CPU usage on systems where `acquireAudioTimeline` is expensive (notably Windows)
+
+**Example:**
+```chuck
+AbletonLink link => blackhole;
+
+// Default: poll every 64 samples
+64 => link.updateInterval;
+
+// More aggressive CPU savings
+128 => link.updateInterval;
+
+// Per-sample (maximum precision, highest CPU)
+1 => link.updateInterval;
+
+// Read current setting
+link.updateInterval() => int interval;
+<<< "Update interval:", interval, "samples" >>>;
+```
+
 ### `offset(float offset_ms) -> float`
 
 Set timing offset in milliseconds for latency compensation.
@@ -283,6 +319,19 @@ link.resolution() => int res;
 <<< "Resolution is:", res, "steps per beat" >>>;
 ```
 
+### `updateInterval() -> int`
+
+Get the current update interval setting.
+
+**Returns:** Current update interval in samples
+
+**Example:**
+```chuck
+AbletonLink link => blackhole;
+link.updateInterval() => int interval;
+<<< "Update interval:", interval, "samples" >>>;
+```
+
 ---
 
 ## Output Signal
@@ -308,7 +357,7 @@ link.last() => float currentStep;
 
 **Notes:**
 - Must connect to `blackhole` or `dac` for processing
-- Output updates sample-by-sample
+- Output updates every `updateInterval` samples (default 64)
 - Step changes occur at beat boundaries
 - Use in sample-rate loop to detect step changes
 
@@ -636,19 +685,21 @@ AbletonLink uses the official **Ableton Link SDK**:
 
 ### Performance
 
-- Minimal CPU overhead
-- Sample-accurate timing
+- Low CPU overhead (timeline polled every `updateInterval` samples, default 64)
+- Sub-millisecond timing precision at default settings
 - Sub-millisecond network latency (typical)
 - Automatic network jitter compensation
+- Use `updateInterval` to tune CPU vs. precision tradeoff
 
 ---
 
 ## Timing Precision
 
-### Sample-Accurate Events
+### Step Update Granularity
 
-AbletonLink provides **sample-accurate** step changes:
-- Step values update at exact sample boundaries
+AbletonLink updates step values every `updateInterval` samples (default 64):
+- At the default, timing granularity is ~1.45ms at 44.1kHz
+- Set `updateInterval` to 1 for per-sample updates if needed
 - No timing jitter from network delays
 - Compensates for network latency automatically
 
@@ -867,6 +918,7 @@ Methods that set values return the value assigned:
 - `tempo(float)` → Returns `float`
 - `quantum(int)` → Returns `int`
 - `resolution(int)` → Returns `int`
+- `updateInterval(int)` → Returns `int`
 - `offset(float)` → Returns `float`
 - `reset(int)` → Returns `int`
 
@@ -876,6 +928,7 @@ Methods that retrieve values:
 - `tempo()` → Returns current tempo as `float`
 - `quantum()` → Returns current quantum as `int`
 - `resolution()` → Returns current resolution as `int`
+- `updateInterval()` → Returns current update interval as `int`
 
 ### UGen Output
 

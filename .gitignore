@@ -45,6 +45,10 @@
 # debug information files
 *.dwo
 
+# caches
+.*_cache/
+.cache/
+
 # CMake
 build/
 _deps/

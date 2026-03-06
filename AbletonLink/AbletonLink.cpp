@@ -21,12 +21,14 @@ CK_DLL_MFUN(abletonlink_setEnabled);
 CK_DLL_MFUN(abletonlink_setTempo);
 CK_DLL_MFUN(abletonlink_setQuantum);
 CK_DLL_MFUN(abletonlink_setResolution);
+CK_DLL_MFUN(abletonlink_setUpdateInterval);
 CK_DLL_MFUN(abletonlink_setOffset);
 CK_DLL_MFUN(abletonlink_setReset);
 
 CK_DLL_MFUN(abletonlink_getTempo);
 CK_DLL_MFUN(abletonlink_getQuantum);
 CK_DLL_MFUN(abletonlink_getResolution);
+CK_DLL_MFUN(abletonlink_getUpdateInterval);
 
 // for Chugins extending UGen, this is mono synthesis function for 1 sample
 CK_DLL_TICK(abletonlink_tick);
@@ -49,6 +51,8 @@ public:
         quantum = 4;
         tempo = 0;
         outval = 0;
+        update_interval = 64;
+        sample_count = 0;
         double initial_tempo = 120.0;
         link = abl_link::AblLinkWrapper::getSharedInstance(initial_tempo);
         link->enable(TRUE);
@@ -57,31 +61,32 @@ public:
     // for Chugins extending UGen
     SAMPLE tick( SAMPLE in )
     {
-      std::chrono::microseconds curr_time;
-      auto timeline = link->acquireAudioTimeline(&curr_time);
-      if (tempo < 0) {
-        timeline.setTempo(-tempo, curr_time);
-      }
-      const double prev_tempo = tempo;
-      tempo = timeline.tempo();
-      if (prev_tempo != tempo) {
-        printf("Setting tempo to %f\n",tempo);
-      }
-      double curr_beat_time;
-      curr_beat_time = timeline.beatAtTime(curr_time, quantum);
-      //outlet_float(beat_out, curr_beat_time);
-      const double curr_phase = fmod(curr_beat_time, quantum);
-      //outlet_float(phase_out, curr_phase);
-      if (curr_beat_time > prev_beat_time) {
-        const double prev_phase = fmod(prev_beat_time, quantum);
-        const double prev_step = floor(prev_phase * steps_per_beat);
-        const double curr_step = floor(curr_phase * steps_per_beat);
-        if (prev_phase - curr_phase > quantum / 2 || prev_step != curr_step) {
-          outval = curr_step;
+      if (sample_count % update_interval == 0) {
+        std::chrono::microseconds curr_time;
+        auto timeline = link->acquireAudioTimeline(&curr_time);
+        if (tempo < 0) {
+          timeline.setTempo(-tempo, curr_time);
         }
+        const double prev_tempo = tempo;
+        tempo = timeline.tempo();
+        if (prev_tempo != tempo) {
+          printf("Setting tempo to %f\n",tempo);
+        }
+        double curr_beat_time;
+        curr_beat_time = timeline.beatAtTime(curr_time, quantum);
+        const double curr_phase = fmod(curr_beat_time, quantum);
+        if (curr_beat_time > prev_beat_time) {
+          const double prev_phase = fmod(prev_beat_time, quantum);
+          const double prev_step = floor(prev_phase * steps_per_beat);
+          const double curr_step = floor(curr_phase * steps_per_beat);
+          if (prev_phase - curr_phase > quantum / 2.0 || prev_step != curr_step) {
+            outval = curr_step;
+          }
+        }
+        prev_beat_time = curr_beat_time;
+        link->releaseAudioTimeline(timeline);
       }
-      prev_beat_time = curr_beat_time;
-      link->releaseAudioTimeline(timeline);
+      sample_count++;
 
       return outval;
     }
@@ -89,6 +94,7 @@ public:
     float getTempo() {return tempo;}
     float getQuantum() {return quantum;}
     float getResolution() {return steps_per_beat;}
+    int getUpdateInterval() {return update_interval;}
 
     int setEnabled (t_CKINT p)
     {
@@ -111,6 +117,13 @@ public:
     int setResolution (t_CKINT p)
     {
       steps_per_beat = p;
+      return p;
+    }
+
+    int setUpdateInterval (t_CKINT p)
+    {
+      if (p < 1) p = 1;
+      update_interval = p;
       return p;
     }
 
@@ -147,6 +160,8 @@ private:
     int quantum;
     double tempo;
     double outval;
+    int update_interval;
+    int sample_count;
     std::shared_ptr<abl_link::AblLinkWrapper> link;
 };
 
@@ -183,6 +198,9 @@ CK_DLL_QUERY( AbletonLink )
     QUERY->add_mfun(QUERY, abletonlink_setResolution, "int", "resolution");
     QUERY->add_arg(QUERY, "int", "arg");
 
+    QUERY->add_mfun(QUERY, abletonlink_setUpdateInterval, "int", "updateInterval");
+    QUERY->add_arg(QUERY, "int", "arg");
+
     QUERY->add_mfun(QUERY, abletonlink_setOffset, "float", "offset");
     QUERY->add_arg(QUERY, "float", "arg");
 
@@ -192,6 +210,7 @@ CK_DLL_QUERY( AbletonLink )
     QUERY->add_mfun(QUERY, abletonlink_getTempo, "float", "tempo");
     QUERY->add_mfun(QUERY, abletonlink_getQuantum, "int", "quantum");
     QUERY->add_mfun(QUERY, abletonlink_getResolution, "int", "resolution");
+    QUERY->add_mfun(QUERY, abletonlink_getUpdateInterval, "int", "updateInterval");
 
     // this reserves a variable in the ChucK internal class to store
     // referene to the c++ class we defined above
@@ -307,6 +326,18 @@ CK_DLL_MFUN(abletonlink_setResolution)
     AbletonLink * al_obj = (AbletonLink *) OBJ_MEMBER_INT(SELF, abletonlink_data_offset);
     // set the return value
     RETURN->v_int = al_obj->setResolution(GET_NEXT_INT(ARGS));
+}
+
+CK_DLL_MFUN(abletonlink_setUpdateInterval)
+{
+    AbletonLink * al_obj = (AbletonLink *) OBJ_MEMBER_INT(SELF, abletonlink_data_offset);
+    RETURN->v_int = al_obj->setUpdateInterval(GET_NEXT_INT(ARGS));
+}
+
+CK_DLL_MFUN(abletonlink_getUpdateInterval)
+{
+    AbletonLink * al_obj = (AbletonLink *) OBJ_MEMBER_INT(SELF, abletonlink_data_offset);
+    RETURN->v_int = al_obj->getUpdateInterval();
 }
 
 CK_DLL_MFUN(abletonlink_setOffset)

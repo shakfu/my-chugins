@@ -99,6 +99,26 @@ Control the subdivision resolution within each beat:
 link.resolution() => int currentResolution;
 ```
 
+### Update Interval
+
+Control how often (in samples) the Link timeline is polled. Lower values give finer timing resolution but use more CPU. The default is 64 samples (~1.45ms at 44.1kHz), which is well below the threshold of audible timing jitter:
+
+```chuck
+// Set update interval (in samples)
+64 => link.updateInterval;
+
+// Get current update interval
+link.updateInterval() => int currentInterval;
+
+// Per-sample updates (original behavior, highest CPU)
+1 => link.updateInterval;
+
+// Lower CPU usage, still sub-millisecond at 44.1kHz
+32 => link.updateInterval;
+```
+
+Thanks to @giohappy for reporting this issue and suggesting 64 samples as a default.
+
 ### Latency Compensation
 
 ```chuck
@@ -179,7 +199,9 @@ AbletonLink automatically discovers other Link-enabled applications on the local
 
 - The AbletonLink UGen is designed for real-time audio thread usage
 - Network synchronization adds minimal latency
-- Use appropriate resolution settings to balance precision and performance
+- The Link timeline is polled every `updateInterval` samples (default 64) rather than every sample, significantly reducing CPU usage
+- Use `updateInterval` to trade timing precision for CPU: higher values use less CPU but reduce timing granularity
+- At the default of 64 samples (~1.45ms at 44.1kHz), timing precision is well within perceptual limits
 - The chugin handles thread safety internally
 
 ## Compatibility
